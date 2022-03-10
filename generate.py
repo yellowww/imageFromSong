@@ -6,9 +6,16 @@ import math
 import random
 # from email.policy import default
 from urllib.request import urlopen
+import lyricsgenius as lg
 from tqdm import tqdm
 import sys
 import os
+import tkinter as tk
+from PIL import ImageTk, Image
+
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize, sent_tokenize
 
 # pip install taming-transformers doesn't work with Gumbel, but does not yet work with coco etc
 # appending the path does work with Gumbel, but gives ModuleNotFoundError: No module named 'transformers' for coco etc
@@ -92,12 +99,91 @@ vq_parser.add_argument("-aug",  "--augments", nargs='+', action='append', type=s
 vq_parser.add_argument("-vsd",  "--video_style_dir", type=str, help="Directory with video frames to style", default=None, dest='video_style_dir')
 vq_parser.add_argument("-cd",   "--cuda_device", type=str, help="Cuda device to use", default="cuda:0", dest='cuda_device')
 
+def findCommonLyrics(allLyrics):
+    allDifferent = []
+    diffCount = []
+    sortedCount = []
+    for i in allLyrics:
+        if i in allDifferent:
+            index = allDifferent.index(i)
+            diffCount[index]+=1
+            sortedCount[index]+=1
+        if i not in allDifferent:
+            if(i != "" and checkIfHasNoun(i)):
+                allDifferent.append(i)
+                diffCount.append(1)
+                sortedCount.append(1)
+    sortedCount.sort(reverse=True)
+    outLines = []
+    outWeight = []
+    for i in range(len(allDifferent)):
+        if(diffCount[i]>=sortedCount[4] and diffCount[i]>1 and len(outLines)<7):
+            outLines.append(allDifferent[i])
+            outWeight.append(diffCount[i]/sortedCount[0])
+    outString = ""
+    for i in range(len(outLines)):
+        if(i > 0):
+            outString+=" | "
+        outString+=outLines[i]
+        outString+=":"+str(outWeight[i])
+    return outString
 
-# Execute the parse_args() method
+
+def checkIfHasNoun(txt):
+    stop_words = set(stopwords.words('english'))
+
+    tokenized = sent_tokenize(txt)
+    for i in tokenized:
+        
+        # Word tokenizers is used to find the words
+        # and punctuation in a string
+        wordsList = nltk.word_tokenize(i)
+    
+        # removing stop words from wordList
+        wordsList = [w for w in wordsList if not w in stop_words]
+    
+        #  Using a Tagger. Which is part-of-speech
+        # tagger or POS-tagger.
+        tagged = nltk.pos_tag(wordsList)
+    
+        for i in tagged:
+            if(i[1] == "NN"):
+                return True
+        return False
+
+def new_window():
+    win = tk.Tk()
+    win.geometry("304x304")
+    
+
+    frame = tk.Frame(win, width=304,height=304)
+    frame.pack()
+    frame.place(anchor='center', relx=0.5, rely=0.5)
+
+    img = ImageTk.PhotoImage(Image.open("output.png"))
+
+    label = tk.Label(frame, image = img)
+    label.pack()
+
+    win.mainloop()
+
+songSearch = input("Search for song: ")
+artistSearch = input("Artist name: ")
+genius = lg.Genius('xtBtnh00BsZL0f9agS2VkierSOXx8tYmulRyUkzz9osfhn44j1smJZEq2L4rtNnv', skip_non_songs=True, excluded_terms=["(Remix)", "(Live)"], remove_section_headers=True)
+foundSong = genius.search_song(songSearch, artistSearch)
+
 args = vq_parser.parse_args()
 
+if(foundSong != "None"):
+    print("Song Found!")
+    inputPrompt = findCommonLyrics(foundSong.lyrics.split('\n'));
+    args.prompts = inputPrompt
+    
+
+
+
 if not args.prompts and not args.image_prompts:
-    args.prompts = "A cute, smiling, Nerdy Rodent"
+    args.prompts = "Error: NO SONG FOUND!"
 
 if args.cudnn_determinism:
    torch.backends.cudnn.deterministic = True
@@ -911,7 +997,8 @@ try:
             pbar.update()
 except KeyboardInterrupt:
     pass
-
+print("done")
+new_window()
 # All done :)
 
 # Video generation
